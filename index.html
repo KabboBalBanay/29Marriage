@@ -48,13 +48,15 @@ function newG(){return{ph:'lobby',human:[1,0,0,0],dealer:3,sc:[0,0],hands:[[],[]
 function deal(){let d,bad;do{d=[];for(const s of S)for(const r of R)d.push(r+s);
  for(let i=31;i>0;i--){const j=Math.random()*(i+1)|0;[d[i],d[j]]=[d[j],d[i]]}
  G.hands=[0,1,2,3].map(i=>d.slice(i*4,i*4+4));bad=G.hands.some(h=>h.filter(c=>c[0]=='J').length==4);}while(bad);
- G.deck=d.slice(16);G.ph='bid';G.passed=[0,0,0,0];G.high=null;G.prev=null;G.trump=null;G.trick=[];G.pts=[0,0];G.tricks=0;G.lock=0;G.turn=G.first=(G.dealer+1)%4}
+ G.deck=d.slice(16);G.ph='bid';G.passed=[0,0,0,0];G.high=null;G.prev=null;G.ci=1;G.wm=0;G.trump=null;G.trick=[];G.pts=[0,0];G.tricks=0;G.lock=0;G.turn=G.first=(G.dealer+1)%4}
 function redeal(){G.dealer=(G.dealer+1)%4;deal()}
+const minB=s=>G.high?(G.prev==s&&!G.wm?G.high.v:G.high.v+1):16;
+function nextFresh(){if(G.ci>=4){if(G.high){G.ph='trump';G.turn=G.high.s;G.msg=''}else{G.msg='Everyone passed — redealt';redeal()}return}G.turn=(G.first+G.ci++)%4}
 function bid(s,v){if(G.ph!='bid'||s!=G.turn)return;
- if(v){const h=G.high;if(!(v>=16&&v<=28&&(!h||v>h.v||(v==h.v&&G.prev==s))))return;G.prev=h?h.s:null;G.high={s,v}}else G.passed[s]=1;
- if(G.passed.every(x=>x)){G.msg='Everyone passed — redealt';return redeal()}
- let n=(s+1)%4;while(G.passed[n])n=(n+1)%4;
- if(G.high&&n==G.high.s){G.ph='trump';G.turn=n;G.msg=''}else G.turn=n}
+ if(v){const h=G.high;if(!(v>=16&&v<=28&&v>=minB(s)))return;
+  G.wm=!!h&&v==h.v;G.prev=h?h.s:null;G.high={s,v};
+  if(G.prev!=null)G.turn=G.prev;else nextFresh()}
+ else{G.passed[s]=1;nextFresh()}}
 function setTrump(s,t){if(G.ph!='trump'||s!=G.turn||!S.includes(t))return;G.trump=t;
  for(let i=0;i<4;i++)G.hands[i]=G.hands[i].concat(G.deck.slice(i*4,i*4+4));
  const hs=G.high.s,opp=[(hs+1)%4,(hs+3)%4];
@@ -74,7 +76,7 @@ function resolve(){const w=win(G.trick),sum=G.trick.reduce((a,t)=>a+pv(t.c),0);G
 function botAct(s){const h=G.hands[s];
  if(G.ph=='bid'){const p=h.reduce((a,c)=>a+pv(c),0),est=Math.min(20,14+p+(S.some(x=>h.filter(c=>su(c)==x).length>=3)?1:0)),hi=G.high;
   if(s==G.first&&!hi&&G.passed.every(x=>!x)&&!p)return redeal();
-  const v=hi?(G.prev==s?hi.v:hi.v+1):16;bid(s,v<=est?v:0)}
+  const v=minB(s);bid(s,v<=est?v:0)}
  else if(G.ph=='trump'){const sc=x=>h.filter(c=>su(c)==x).reduce((a,c)=>a+2+pv(c),0);setTrump(s,S.reduce((a,b)=>sc(b)>sc(a)?b:a))}
  else{const L=legal(s);let c;
   if(!G.trick.length)c=L.reduce((a,b)=>rk(b)<rk(a)?b:a);
@@ -83,7 +85,7 @@ function botAct(s){const h=G.hands[s];
   play(s,c)}}
 function tick(){clearTimeout(T);T=setTimeout(()=>{if(['bid','trump','play'].includes(G.ph)&&!G.lock&&G.turn>=0&&!G.human[G.turn]){botAct(G.turn);bc();tick()}},800)}
 
-function view(i){const hi=G.high,min=hi?(G.prev==i?hi.v:hi.v+1):16,h=G.hands[i];
+function view(i){const hi=G.high,min=minB(i),h=G.hands[i];
  return{me:i,ph:G.ph,hand:h,cnt:G.hands.map(x=>x.length),turn:G.turn,high:hi,min,trump:G.trump,trick:G.trick,pts:G.pts,target:G.target,sc:G.sc,msg:G.msg,human:G.human,host:i==0,
   legal:G.ph=='play'&&G.turn==i?legal(i):[],canRedeal:G.ph=='bid'&&G.turn==i&&i==G.first&&!hi&&G.passed.every(x=>!x)&&!h.reduce((a,c)=>a+pv(c),0)}}
 function bc(){for(const i in conns)conns[i].open&&conns[i].send(view(+i));V=view(0);render()}
